@@ -16,7 +16,7 @@ uint8_t AddressSpace::read(unsigned address, bool io)
 {
 	if (io == true) return _io.read(address);
 	else {
-		if (address < 16384) return _rom.read(address);
+		if (address < 16384+16384) return _rom.read(address);
 		else return _ram.read(address);}}
 void AddressSpace::write16(unsigned address, uint16_t value)
 {

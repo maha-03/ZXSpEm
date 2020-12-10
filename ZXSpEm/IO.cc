@@ -9,8 +9,7 @@ void IO::write(unsigned address, uint8_t value)
 		case 0x01: _adrv->set_level(-16384); break;
 		case 0x02: _adrv->set_level(16384); break;
 		case 0x03: _adrv->set_level(16384+8192); break;
-		default: ;
-		}}}
+		default: ;}}}
 uint8_t IO::read(unsigned address) const
 {
 	uint8_t tap= (address >> 6);

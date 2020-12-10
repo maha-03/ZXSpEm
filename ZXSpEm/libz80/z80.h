@@ -166,6 +166,7 @@ void Z80RESET (Z80Context* ctx);
 void Z80INT (Z80Context* ctx, byte value);
 
 
+void Z80_Run(void);
 /** Generates a non-maskable interrupt. */
 void Z80NMI (Z80Context* ctx);
 

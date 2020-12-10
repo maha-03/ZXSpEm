@@ -3,17 +3,27 @@
 #include <cstdint>
 #include "AudioDriver.h"
 class IO
-{protected:
+{
+protected:
 	uint8_t _port_fe { 0x00 };
 	uint8_t _ear { 0x00 };
 	uint8_t _key_matrix[8] { 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff, 0xff };
 	AudioDriver * _adrv;
 public:
 	IO(AudioDriver * drv): _adrv(drv) {}
+
 	void write(unsigned address, uint8_t value);
 	uint8_t read(unsigned address) const;
+
 	uint8_t border() const { return _port_fe & 0x07; }
+
 	void keydown(unsigned row, unsigned col);
 	void keyup(unsigned row, unsigned col);
-	void set_ear(uint8_t ear) { _ear = ear & 1; }};
+	void set_ear(uint8_t ear) { _ear = ear & 1; }
+};
+
+
+
+
+
 #endif /* IO_H_ */

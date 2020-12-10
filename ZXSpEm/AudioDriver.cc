@@ -24,6 +24,3 @@ void AudioDriver::callback(short int * buffer, size_t len)
 {
 	for (size_t i = 0; i < len; i++)
 		buffer[i] = _level;}
-
-
-

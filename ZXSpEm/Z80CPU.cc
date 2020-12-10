@@ -2,6 +2,8 @@
 #include <cstdint>
 #include <vector>
 #include "Z80CPU.h"
+#include "libspectrum.h"
+
 #pragma pack(push, 1)
 struct SNA_Header
 {
@@ -11,22 +13,19 @@ struct SNA_Header
 	uint16_t BC1;
 	uint16_t AF1;
 	uint16_t HL;
-	uint16_t HLx;
 	uint16_t DE;
-	uint16_t DEx;
 	uint16_t BC;
 	uint16_t IY;
 	uint16_t IX;
 	uint8_t IFF2;
 	uint8_t R;
 	uint16_t AF;
-	uint16_t AFx;
 	uint16_t SP;
 	uint8_t IM;
 	uint8_t FE;
-	uint8_t cyclesSinceLastFrame;
 };
 #pragma pack(pop)
+
 #pragma pack(push, 1)
 struct Z80_Header_1
 {
@@ -48,10 +47,11 @@ struct Z80_Header_1
 	uint8_t stuffs2;
 };
 #pragma pack(pop)
+
 #pragma pack(push, 1)
 struct Z80_Header_2
 {
-	uint16_t hdrlen;
+//	uint16_t hdrlen;
 	uint16_t PC;
 	uint8_t hw;
 	uint8_t ext0; // 7ffd
@@ -68,18 +68,24 @@ struct Z80_Header_2
 	uint8_t fsck_those_bytes[4];
 };
 #pragma pack(pop)
+
 byte In_mem(void* param, ushort address)
 {
-	return reinterpret_cast<Z80CPU*>(param)->_bus.read(address);}
+	return reinterpret_cast<Z80CPU*>(param)->_bus.read(address);
+}
 void Out_mem(void* param, ushort address,byte data)
 {
-	reinterpret_cast<Z80CPU*>(param)->_bus.write(address, data);}
+	reinterpret_cast<Z80CPU*>(param)->_bus.write(address, data);
+}
 byte In_io(void* param, ushort address)
 {
-	return reinterpret_cast<Z80CPU*>(param)->_bus.read(address,true);}
+	return reinterpret_cast<Z80CPU*>(param)->_bus.read(address,true);
+}
 void Out_io(void* param, ushort address,byte data)
 {
-	reinterpret_cast<Z80CPU*>(param)->_bus.write(address, data,true);}
+	reinterpret_cast<Z80CPU*>(param)->_bus.write(address, data,true);
+}
+
 void Z80CPU::save_state_sna(const char *filename)
 {
 	SNA_Header hdr;
@@ -102,32 +108,41 @@ void Z80CPU::save_state_sna(const char *filename)
 	hdr.AF = _context.R1.wr.AF;
 	hdr.SP = _context.R1.wr.SP;
 	hdr.IM = _context.IM;
-	hdr.FE = 0; // FIXME: сохранять реальный цвет рамки
+	hdr.FE = 0; // FIXME: сохранять реальный цвет рамочки
 	hdr.SP -= 2;
 	data[hdr.SP - 16384] = _context.PC & 0x00ff;
 	data[hdr.SP - 16384 + 1] = _context.PC >> 8;
+
 	std::fstream sna;
 	sna.open(filename, std::ios::out | std::ios::binary);
 	sna.write(reinterpret_cast<const char *>(&hdr), sizeof(hdr));
 	sna.write(reinterpret_cast<const char *>(&data[0]), data.size());
-	sna.close();}
+	sna.close();
+}
+
 void Z80CPU::load_state_sna(const char *filename)
 {
 	SNA_Header hdr;
 	std::vector<uint8_t> data;
 	data.resize(16384 * 3);
+
 	std::fstream sna;
 	sna.open(filename, std::ios::in | std::ios::binary);
 	sna.read(reinterpret_cast<char *>(&hdr), sizeof(hdr));
 	sna.read(reinterpret_cast<char *>(&data[0]), data.size());
+
 	data[hdr.SP - 16384] = _context.PC & 0x00ff;
 	data[hdr.SP - 16384 + 1] = _context.PC >> 8;
+
 	_context.PC  = 0;
 	_context.PC  |= data[hdr.SP - 16384];
 	_context.PC  |= (data[hdr.SP - 16384 + 1] << 8);
 	hdr.SP += 2;
+
 	for (unsigned memptr = 16384; memptr < 65536; memptr++)
 		_bus.write(memptr, data[memptr - 16384]);
+
+
 	_context.I = hdr.I;
 	_context.R2.wr.HL= hdr.HL1;
 	_context.R2.wr.DE = hdr.DE1;
@@ -143,7 +158,9 @@ void Z80CPU::load_state_sna(const char *filename)
 	_context.R1.wr.AF = hdr.AF;
 	_context.R1.wr.SP = hdr.SP;
 	_context.IM = hdr.IM;
+
 	_bus.write(0xfe, hdr.FE, true);
+
 	_context.IFF1 = _context.IFF2;
 }
 
@@ -154,7 +171,9 @@ void Z80CPU::load_state_z80(const char *filename)
 	Z80_Header_1 hdr1;
 	Z80_Header_2 hdr2;
 	std::vector<uint8_t> data;
+
 	data.resize(16384 * 3);
+
 	std::fstream z80f;
 	z80f.open(filename, std::ios::in | std::ios::binary);
 	z80f.read(reinterpret_cast<char *>(&hdr1), sizeof(hdr1));
@@ -164,7 +183,9 @@ void Z80CPU::load_state_z80(const char *filename)
 		z80f.read(reinterpret_cast<char *>(&hdr2size), 2);
 		z80f.read(reinterpret_cast<char *>(&hdr2), hdr2size);
 	} else {
-		real_pc = hdr1.PC;}
+		real_pc = hdr1.PC;
+	}
+
 	_context.R1.br.A = hdr1.A;
 	_context.R1.br.F = hdr1.F;
 	_context.R1.br.C= hdr1.C;
@@ -191,11 +212,14 @@ void Z80CPU::load_state_z80(const char *filename)
 	_context.R1.br.IXh = hdr1.IXH;
 	_context.IFF1 = hdr1.IFF1;
 	_context.IFF2 = hdr1.IFF2;
+
 	_bus.write(0xfe, (hdr1.stuffs1 >> 1) & 0x07, true);
 	_context.IM = hdr1.stuffs2 & 0x03;
+
 	if (hdr1.stuffs1 & 0x20) { // данные сжаты
 		uint16_t memptr = 0;
 		uint8_t b1, b2, xx, yy;
+
 		do {
 			z80f.read(reinterpret_cast<char *>(&b1), 1);
 			if (b1 != 0xed) {
@@ -212,13 +236,22 @@ void Z80CPU::load_state_z80(const char *filename)
 					z80f.read(reinterpret_cast<char *>(&xx), 1);
 					z80f.read(reinterpret_cast<char *>(&yy), 1);
 					while (yy > 0) {
-						data[memptr++] = xx;}}}
+						data[memptr++] = xx;
+					}
+				}
+			}
 		} while (z80f.good() and not z80f.eof());
+
 	} else { // данные не сжаты
-		z80f.readsome(reinterpret_cast<char *>(&data[0]), data.size());}
+		z80f.readsome(reinterpret_cast<char *>(&data[0]), data.size());
+	}
+
 	for (uint16_t memptr = 0; memptr < data.size(); memptr++)
 		_bus.write(memptr + 16384, data[memptr]);
-	z80f.close();}
+
+	z80f.close();
+}
+
 void Z80CPU::load_state_sna_libspectrum(const char * filename)
 {
 	std::vector<uint8_t> buffer;
@@ -228,15 +261,20 @@ void Z80CPU::load_state_sna_libspectrum(const char * filename)
 	sna.seekg(0);
 	sna.read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
 	sna.close();
+
 	libspectrum_snap * snap;
+
 	snap = libspectrum_snap_alloc();
+
 	libspectrum_snap_read(
 			snap,
 			&buffer[0],
 			buffer.size(),
-			LIBSPECTRUM_ID_SNAPSHOT_SNA,
+			LIBSPECTRUM_ID_SNAPSHOT_Z80,
 			filename);
+
 	libspectrum_snap_a(snap);
+
 	_context.I = libspectrum_snap_i(snap);
 	_context.R = libspectrum_snap_r(snap);
 	_context.R1.wr.HL = libspectrum_snap_hl(snap);
@@ -247,6 +285,7 @@ void Z80CPU::load_state_sna_libspectrum(const char * filename)
 	_context.R1.wr.IX = libspectrum_snap_ix(snap);
 	_context.R1.wr.IY = libspectrum_snap_iy(snap);
 	_context.R1.wr.SP = libspectrum_snap_sp(snap);
+
 	_context.R2.wr.HL = libspectrum_snap_hl_(snap);
 	_context.R2.wr.DE = libspectrum_snap_de_(snap);
 	_context.R2.wr.BC = libspectrum_snap_bc_(snap);
@@ -255,9 +294,12 @@ void Z80CPU::load_state_sna_libspectrum(const char * filename)
 	_context.R2.wr.IX = libspectrum_snap_ix(snap);
 	_context.R2.wr.IY = libspectrum_snap_iy(snap);
 	_context.R2.wr.SP = libspectrum_snap_sp(snap);
+
 	_context.IFF1 = libspectrum_snap_iff1(snap);
 	_context.IFF2 = libspectrum_snap_iff2(snap);
+
 	_bus.write(0xfe, libspectrum_snap_out_ula(snap), true);
+
 	// Страница с видеопамятью
 	for (unsigned memptr = 0x4000; memptr < 0x8000; memptr++)
 		_bus.write(memptr, libspectrum_snap_pages(snap, 5)[memptr - 0x4000]);
@@ -267,7 +309,11 @@ void Z80CPU::load_state_sna_libspectrum(const char * filename)
 	// Страница в конце
 	for (unsigned memptr = 0xc000; memptr < 0x10000; memptr++)
 		_bus.write(memptr, libspectrum_snap_pages(snap, 1)[memptr - 0xc000]);
-	libspectrum_snap_free(snap);}
+
+
+	libspectrum_snap_free(snap);
+}
+
 void Z80CPU::load_state_z80_libspectrum(const char * filename)
 {
 	std::vector<uint8_t> buffer;
@@ -277,15 +323,20 @@ void Z80CPU::load_state_z80_libspectrum(const char * filename)
 	z80file.seekg(0);
 	z80file.read(reinterpret_cast<char*>(&buffer[0]), buffer.size());
 	z80file.close();
+	//std::ifstream scrfile("test1.scr", std::ios::binary);
 	libspectrum_snap * snap;
+
 	snap = libspectrum_snap_alloc();
+
 	libspectrum_snap_read(
 			snap,
 			&buffer[0],
 			buffer.size(),
 			LIBSPECTRUM_ID_SNAPSHOT_Z80,
 			filename);
+
 	libspectrum_snap_a(snap);
+
 	_context.I = libspectrum_snap_i(snap);
 	_context.R = libspectrum_snap_r(snap);
 	_context.R1.wr.HL = libspectrum_snap_hl(snap);
@@ -296,6 +347,7 @@ void Z80CPU::load_state_z80_libspectrum(const char * filename)
 	_context.R1.wr.IX = libspectrum_snap_ix(snap);
 	_context.R1.wr.IY = libspectrum_snap_iy(snap);
 	_context.R1.wr.SP = libspectrum_snap_sp(snap);
+
 	_context.R2.wr.HL = libspectrum_snap_hl_(snap);
 	_context.R2.wr.DE = libspectrum_snap_de_(snap);
 	_context.R2.wr.BC = libspectrum_snap_bc_(snap);
@@ -304,9 +356,12 @@ void Z80CPU::load_state_z80_libspectrum(const char * filename)
 	_context.R2.wr.IX = libspectrum_snap_ix(snap);
 	_context.R2.wr.IY = libspectrum_snap_iy(snap);
 	_context.R2.wr.SP = libspectrum_snap_sp(snap);
+
 	_context.IFF1 = libspectrum_snap_iff1(snap);
 	_context.IFF2 = libspectrum_snap_iff2(snap);
+
 	_bus.write(0xfe, libspectrum_snap_out_ula(snap), true);
+
 	// Страница с видеопамятью
 	for (unsigned memptr = 0x4000; memptr < 0x8000; memptr++)
 		_bus.write(memptr, libspectrum_snap_pages(snap, 5)[memptr - 0x4000]);
@@ -316,7 +371,11 @@ void Z80CPU::load_state_z80_libspectrum(const char * filename)
 	// Страница в конце
 	for (unsigned memptr = 0xc000; memptr < 0x10000; memptr++)
 		_bus.write(memptr, libspectrum_snap_pages(snap, 0)[memptr - 0xc000]);
-	libspectrum_snap_free(snap);}
+
+
+	libspectrum_snap_free(snap);
+}
+
 void Z80CPU::load_state_tape_libspectrum(const char * filename)
 {
 	std::vector<uint8_t> buffer;
@@ -337,4 +396,40 @@ void Z80CPU::load_state_tape_libspectrum(const char * filename)
 			buffer.size(),
 			LIBSPECTRUM_ID_TAPE_TAP,
 			filename);
+
+	libspectrum_tape_a(tape);
+
+	_context.I = libspectrum_snap_i(snap);
+	_context.R = libspectrum_snap_r(snap);
+	_context.R1.wr.HL = libspectrum_snap_hl(snap);
+	_context.R1.wr.DE = libspectrum_snap_de(snap);
+	_context.R1.wr.BC = libspectrum_snap_bc(snap);
+	_context.R1.br.A = libspectrum_snap_a(snap);
+	_context.R1.br.F = libspectrum_snap_f(snap);
+	_context.R1.wr.IX = libspectrum_snap_ix(snap);
+	_context.R1.wr.IY = libspectrum_snap_iy(snap);
+	_context.R1.wr.SP = libspectrum_snap_sp(snap);
+
+	_context.R2.wr.HL = libspectrum_snap_hl_(snap);
+	_context.R2.wr.DE = libspectrum_snap_de_(snap);
+	_context.R2.wr.BC = libspectrum_snap_bc_(snap);
+	_context.R2.br.A = libspectrum_snap_a_(snap);
+	_context.R2.br.F = libspectrum_snap_f_(snap);
+	_context.R2.wr.IX = libspectrum_snap_ix(snap);
+	_context.R2.wr.IY = libspectrum_snap_iy(snap);
+	_context.R2.wr.SP = libspectrum_snap_sp(snap);
+
+	_context.IFF1 = libspectrum_snap_iff1(snap);
+	_context.IFF2 = libspectrum_snap_iff2(snap);
+	_bus.write(0xfe, libspectrum_snap_out_ula(snap), true);
+	// Страница с видеопамятью
+	for (unsigned memptr = 0x4000; memptr < 0x8000; memptr++)
+		_bus.write(memptr, libspectrum_snap_pages(snap, 5)[memptr - 0x4000]);
+	// Страница после видеопамяти
+	for (unsigned memptr = 0x8000; memptr < 0xc000; memptr++)
+		_bus.write(memptr, libspectrum_snap_pages(snap, 2)[memptr - 0x8000]);
+	// Страница в конце
+	for (unsigned memptr = 0xc000; memptr < 0x10000; memptr++)
+		_bus.write(memptr, libspectrum_snap_pages(snap, 0)[memptr - 0xc000]);
+	libspectrum_snap_free(snap);
 }

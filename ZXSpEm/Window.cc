@@ -1,21 +1,24 @@
 #include <stdexcept>
 #include "Window.h"
 #include <map>
-static const int gre[16] = {	0,   0,   0,   0, 168, 168, 168, 168, 0,   0,   0,   0, 255, 255, 255, 255, };
-static const int red[16] = {	0,   0, 168, 168,   0,   0, 168, 168, 0,   0, 255, 255,   0,   0, 255, 255, };
-static const int blu[16] = {   	0, 168,   0, 168,   0, 168,   0, 168, 0, 255,   0, 255,   0, 255,   0, 255, };
+static const int gre[16] = {	0,   0,   0,   0, 168, 168, 168, 168,	0,   0,   0,   0, 255, 255, 255, 255, };
+static const int red[16] = {	0,   0, 168, 168,   0,   0, 168, 168, 	0,   0, 255, 255,   0,   0, 255, 255, };
+static const int blu[16] = {   	0, 168,   0, 168,   0, 168,   0, 168,   0, 255,   0, 255,   0, 255,   0, 255, };
 Window::Window(int width, int height)
 : _width(width), _height(height)
 {
 	_window = std::shared_ptr<SDL_Window>(
 			SDL_CreateWindow(
-					"Ёмул€тор ZX Spectrum",
-					SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, width, height, SDL_WINDOW_SHOWN),
+					"Emulator ZX Spectrum",
+					SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+					width, height,
+					SDL_WINDOW_SHOWN),
 			SDL_DestroyWindow);
 	if (_window == nullptr)
 		throw std::runtime_error(
 				std::string("Window creation failed: ") +
 				SDL_GetError());
+
 	_renderer = std::shared_ptr<SDL_Renderer>(
 			SDL_CreateRenderer(_window.get(), -1, SDL_RENDERER_ACCELERATED),
 			SDL_DestroyRenderer);
@@ -79,6 +82,7 @@ void Window::handle_event(const SDL_Event &event)
 			cpu.save_state_sna("save.sna");
 		if (event.key.keysym.scancode == SDL_SCANCODE_F9)
 			cpu.load_state_sna("simsity.tap");
+		// DEBUG
 		if (event.key.keysym.scancode == SDL_SCANCODE_F10)
 			cpu.load_state_sna_libspectrum("jetpac.sna");
 		if (event.key.keysym.scancode == SDL_SCANCODE_F11)
@@ -86,15 +90,20 @@ void Window::handle_event(const SDL_Event &event)
 		{
 			auto k = s_keymap.find(event.key.keysym.scancode);
 			if (k == s_keymap.end()) break;
-			io.keydown(k->second.first, k->second.second);}
+			io.keydown(k->second.first, k->second.second);
+		}
 		break;
 	case SDL_KEYUP:
 		{
 			auto k = s_keymap.find(event.key.keysym.scancode);
 			if (k == s_keymap.end()) break;
-			io.keyup(k->second.first, k->second.second);}
+			io.keyup(k->second.first, k->second.second);
+		}
 		break;
-	default:;}}
+	default:
+		;
+	}
+}
 
 void Window::handle_keys(const Uint8 *keys)
 {
@@ -105,37 +114,49 @@ void Window::do_logic()
 	cpu.intr(0);
 //	cpu.ticks(71590);
 	cpu.ticks(25000);
+	/*static int ctr = 0;
+	ctr++;
+	if (ctr > 10) { ctr = 0; _fb->flash_flip();}
+	for (int i = 0; i<FrameBuffer::TOTAL_WIDTH )*/
 }
 
 void Window::render()
 {
 	unsigned bdr = io.border();
+
 	SDL_SetRenderDrawColor(_renderer.get(), red[bdr], gre[bdr], blu[bdr], 255);
 	SDL_RenderClear(_renderer.get());
+
 	for (unsigned row = 0; row < 192; ++row) {
 		for (unsigned col = 0; col < 32; ++col) {
 			unsigned point = 32 * row + col;
+
 			unsigned a4a0   =  point        & 0x001f;
 			unsigned a10a8  = (point >> 8)  & 0x0007;
 			unsigned a7a5   = (point >> 5)  & 0x0007;
 			unsigned a12a11 = (point >> 11) & 0x0003;
+
 			unsigned raster_addr =
 					0x4000 |
 					(a12a11 << 11) |
 					(  a7a5 << 8) |
 					( a10a8 << 5) |
 					(  a4a0 << 0);
+
 			unsigned attr_addr =
 					0x5800 |
 					(a12a11 << 8) |
 					( a10a8 << 5) |
 					(  a4a0 << 0);
+
 			uint8_t val = ram.read(raster_addr);
 			uint8_t attr = ram.read(attr_addr);
 			uint8_t paper_col = ((attr >> 3) & 0x07) | ((attr & 0x40) >> 3);
 			uint8_t ink_col =   (attr & 0x07) | ((attr & 0x40) >> 3);
-			[[maybe_unused]]uint8_t flash = (paper_col >> 7) & 1;
+[[maybe_unused]]uint8_t flash = (paper_col >> 7) & 1;
+
 			for (unsigned px = 0; px < 8; ++px) {
+
 				SDL_Rect pixel {
 					int(160 + PIXEL_SCALE * 8 * col + PIXEL_SCALE * px),
 					int(120 + PIXEL_SCALE * row),
@@ -152,14 +173,19 @@ void Window::render()
 		}
 	}
 }
+
+
 void Window::main() {
 	SDL_Event event;
 	auto keys = SDL_GetKeyboardState(nullptr);
+
 	while (_want_quit == false) {
 		while (SDL_PollEvent(&event))
 			handle_event(event);
 		handle_keys(keys);
+
 		do_logic();
+
 		render();
 		SDL_RenderPresent(_renderer.get());
 	}
